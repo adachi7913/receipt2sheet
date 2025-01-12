@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>レシート撮影</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ボタン共通スタイル */
+    .styled-button {
+      width: 80%;
+      max-width: 400px;
+      height: 80px;
+      margin: 10px auto;
+      /* 上下マージンを調整 */
+      font-size: 2em;
+      border-radius: 15px;
+      color: white;
+      border: none;
+      cursor: pointer;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+      -webkit-tap-highlight-color: transparent;
+      display: block;
+      /* ボタンをブロック要素にする */
+    }
+
+    .styled-button:active {
+      transform: translateY(2px);
+      box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    #capture {
+      background-color: #4CAF50;
+    }
+
+    #uploadButton {
+      /* アップロードボタンの色を変更 */
+      background-color: #007bff;
+    }
+
+    #retake {
+      display: none;
+      background-color: #007bff;
+    }
+
+    /* ローディング表示 */
+    #loading {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+
+    .loader {
+      border: 16px solid #f3f3f3;
+      border-top: 16px solid #3498db;
+      border-radius: 50%;
+      width: 120px;
+      height: 120px;
+      animation: spin 2s linear infinite;
+      margin-bottom: 20px;
+    }
+
+    #loadingText {
+      color: white;
+      font-size: 1.5em;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ファイル選択 */
+    #file-upload-container {
+      margin: 20px auto;
+      width: 80%;
+      max-width: 400px;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    .file-upload-button {
+      display: block;
+      padding: 10px 20px;
+      background-color: #f0f0f0;
+      /* 薄い灰色 */
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1.2em;
+      text-align: left;
+      overflow: hidden;
+      /* ファイル名がはみ出さないように */
+      text-overflow: ellipsis;
+      /* 長いファイル名を省略 */
+      white-space: nowrap;
+    }
+
+    #file-name {
+      text-align: left;
+      width: 80%;
+      margin: 10px auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* PCレイアウト */
+    @media (min-width: 1024px) {
+
+      #video,
+      #capture,
+      #retake {
+        display: none;
+        /* スマホ用要素を非表示 */
+      }
+
+      #file-upload-container {
+        display: block;
+      }
+    }
+
+    /* スマホレイアウト */
+    @media (max-width: 1023px) {
+      #file-upload-container {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>レシートを撮影してください</h1>
+  <video id="video" autoplay playsinline></video><br>
+  <button id="capture" class="styled-button">撮影</button>
+  <button id="retake" class="styled-button">再撮影</button>
+  <div id="status"></div>
+  <canvas id="canvas"></canvas>
+  <div id="file-upload-container">
+    <label for="fileInput" class="file-upload-button">ファイルを選択</label>
+    <input type="file" id="fileInput" accept="image/*" onchange="displayFileName(this)">
+    <div id="file-name">ファイルが選択されていません</div>
+    <button type="button" id="uploadButton" onclick="uploadFileFromInput()" class="styled-button">ファイルからアップロード</button>
+  </div>
+  <div id="loading">
+    <div class="loader"></div>
+    <div id="loadingText">処理中...</div>
+  </div>
+  <script>
+    const uploadButton = document.getElementById('uploadButton'); // IDで直接取得
+
+const fileNameDisplay = document.getElementById('file-name');
+
+function uploadFileFromInput() {
+    const file = fileInput.files[0];
+    if (!file) {
+        alert("ファイルを選択してください");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = function() {
+        const dataURL = reader.result;
+        uploadData(dataURL);
+    };
+    reader.onerror = function(error) {
+        console.error("FileReaderエラー:", error);
+        alert("ファイルの読み込みに失敗しました: " + error.message);
+    };
+    reader.readAsDataURL(file);
+}
+
+function displayFileName(input) {
+  if (input.files && input.files[0]) {
+    fileNameDisplay.textContent = input.files[0].name;
+  } else {
+    fileNameDisplay.textContent = "ファイルが選択されていません";
+  }
+}
+
+    const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('capture');
+        const retakeButton = document.getElementById('retake');
+        const fileInput = document.getElementById('fileInput');
+        let stream;
+
+        // カメラ起動
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(s => {
+                    stream = s;
+                    video.srcObject = stream;
+                })
+                .catch(error => console.error('カメラアクセスエラー:', error));
+        }
+
+        startCamera();
+
+        captureButton.addEventListener('click', () => {
+            captureButton.disabled = true;
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataURL = canvas.toDataURL('image/jpeg');
+
+            uploadData(dataURL);
+        });
+
+        retakeButton.addEventListener('click', () => {
+            retakeButton.style.display = 'none';
+            captureButton.disabled = false;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            startCamera();
+        });
+
+function uploadData(dataURL) {
+    showLoading(); // ローディング表示
+    disableButtons(); // ボタンを非活性化
+    google.script.run
+        .withSuccessHandler(onSuccess)
+        .withFailureHandler(onFailure)
+        .processImage(dataURL.split(',')[1]);
+}
+
+function onSuccess(message) {
+    hideLoading(); // ローディング非表示
+    enableButtons(); // ボタンを有効化
+    console.log("GASからのレスポンス:", message);
+    alert(message);
+    document.getElementById('status').textContent = "完了";
+    retakeButton.style.display = 'block';
+}
+
+function onFailure(error) {
+    hideLoading(); // ローディング非表示
+    enableButtons(); // ボタンを有効化
+    console.error("GASからのエラー:", error);
+    alert('エラー: ' + error);
+    document.getElementById('status').textContent = "エラー: " + error;
+}
+
+// ローディング表示/非表示関数
+function showLoading() {
+    document.getElementById('loading').style.display = 'flex';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
+
+// ボタンの非活性化/有効化関数
+function disableButtons() {
+    captureButton.disabled = true;
+    retakeButton.disabled = true;
+    document.querySelector('.file-upload-button').disabled = true;
+    uploadButton.disabled = true;
+}
+
+function enableButtons() {
+    captureButton.disabled = false;
+    retakeButton.disabled = false;
+    document.querySelector('.file-upload-button').disabled = false;
+    uploadButton.disabled = false;
+}
+
+  </script>
+</body>
+
+</html>
